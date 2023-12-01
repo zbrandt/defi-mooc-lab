@@ -144,10 +144,8 @@ contract LiquidationOperator is IUniswapV2Callee {
 
     // constants
     address userToLiquidate = 0x59CE4a2AC5bC3f5F225439B2993b86B42f6d3e9F;
-    uint64 deadline = 1621761060; // random uncreated block number
-    uint256 amountBorrow = 2916378221683;
+    uint256 amountBorrow = 2726348232483; // random number
                             
-
     // ERC-20
     IWETH WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     IERC20 WBTC = IERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
@@ -241,10 +239,8 @@ contract LiquidationOperator is IUniswapV2Callee {
         then we send the profits to msg.sender
     */ 
 
-
-
     // required by the swap
-    function uniswapV2Call( // flash swap function?
+    function uniswapV2Call(
         address,
         uint256,
         uint256 amount1,
