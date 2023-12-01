@@ -240,6 +240,7 @@ contract LiquidationOperator is IUniswapV2Callee {
 
         // 1. get the target user account data & make sure it is liquidatable
         (,,,,,healthFactor) = lendingPool.getUserAccountData(userToLiquidate);
+        console.log(healthFactor / 10**18);
         require(healthFactor / 10**18 < 1, "Not unhealthy");
 
         // 2. call flash swap to liquidate the target user
@@ -250,7 +251,7 @@ contract LiquidationOperator is IUniswapV2Callee {
         pair_WETH_USDT.swap(0, amountBorrow, address(this), abi.encode("flash loan")); // address(this) is the address of the caller of the contract
 
         
-        // 3. Convert the profit into ETH and send back to sender
+        // 3. Convert the WETH into ETH and send back to sender
         uint profitWETH = WETH.balanceOf(address(this));
         console.log("profit: ", profitWETH);
         WETH.withdraw(profitWETH);
@@ -259,6 +260,20 @@ contract LiquidationOperator is IUniswapV2Callee {
 
         
     }
+    // the workflow is like this:
+    // check healthiness, then take out a flash loan for USDT
+    // after that uniswapV2Call is executed somehow, I believe
+    /* 
+        we approve transfering USDT to the lending pool to cover the faulty debtor and recieve some WBTC in return
+        then we swap the WBTC for WETH 
+        we then figure out how much we need to repay for the flash loan based on reserves in the pair
+        then we approve and transfer the repayment amount 
+        then we are back to 3 where we see our balance of WETH (all profit since we started at 0)
+        withdrawing from WETH turns into ETH I guess
+        then we send the profits to msg.sender
+    */ 
+
+
 
     // required by the swap
     function uniswapV2Call( // flash swap function?
@@ -268,30 +283,30 @@ contract LiquidationOperator is IUniswapV2Callee {
         bytes calldata
     ) external override {
 
-        uint preLiquidated = WBTC.balanceOf(address(this));
+        uint preLiquidated = WBTC.balanceOf(address(this)); // returns amount of WBTC owned by caller
 
         // 2.1 liquidate the target user
-        USDT.approve(address(lendingPool), amount1);
+        USDT.approve(address(lendingPool), amount1); // sets amount1 to be the lending pools allowance over the callers USDT tokens, needed before liquidate
 
         console.log("liquidate");
-        lendingPool.liquidationCall(address(WBTC), address(USDT), userToLiquidate, amount1, false);
-        uint liquidated = WBTC.balanceOf(address(this)) - preLiquidated;
+        lendingPool.liquidationCall(address(WBTC), address(USDT), userToLiquidate, amount1, false); // liquidate positions of userToLiquidate up to amount1 in WBTC, caller recieves underlying asset directly and gives USDT
+        uint liquidated = WBTC.balanceOf(address(this)) - preLiquidated; // check how much was liquidated
         console.log("Liquidated: ", liquidated);
 
-        // 2.2 swap WBTC for other things
+        // 2.2 swap the liquidated WBTC for WETH
         console.log("swap WBTC for WETH");
-        WBTC.approve(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D, liquidated);
+        WBTC.approve(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D, liquidated); // address is of the Uniswap router for better transactions? idk saw it on the docs
         address[] memory path = new address[](2); // for parameter
         path[0] = address(WBTC);
         path[1] = address(WETH);
-        router.swapExactTokensForTokens(liquidated, 0, path, address(this), deadline);
+        router.swapExactTokensForTokens(liquidated, 0, path, address(this), deadline); // swap liquidated WBTC for WETH amount
 
         // 2.3 repay loan + interest
         console.log("repay flash loan in WETH");
-        (uint reserveWETH, uint reserveUSDT,) = IUniswapV2Pair(msg.sender).getReserves();
-        uint repaymentAmount = getAmountIn(amount1, reserveWETH, reserveUSDT);
-        WETH.approve(msg.sender, repaymentAmount);
-        WETH.transfer(msg.sender, repaymentAmount);
+        (uint reserveWETH, uint reserveUSDT,) = IUniswapV2Pair(msg.sender).getReserves(); // get reserves in the pair
+        uint repaymentAmount = getAmountIn(amount1, reserveWETH, reserveUSDT); // given amount of asset amount1 and pair reserves, figures out how much to repay
+        WETH.approve(msg.sender, repaymentAmount); // aprove before transfer
+        WETH.transfer(msg.sender, repaymentAmount); // transfer to msg.sender
 
     }
 }
