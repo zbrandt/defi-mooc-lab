@@ -130,36 +130,6 @@ interface IUniswapV2Pair {
         );
 }
 
-
-// https://github.com/Uniswap/v2-periphery/blob/master/contracts/interfaces/IUniswapV2Router02.sol
-interface IUniswapV2Router02 {
-    function WETH() external returns (address);
-
-    function swapExactTokensForETH(
-        uint256 amountIn,
-        uint256 amountOutMin,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external returns (uint256[] memory amounts);
-
-    function swapTokensForExactTokens(
-        uint256 amountOut,
-        uint256 amountInMax,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external returns (uint256[] memory amounts);
-
-    function swapExactTokensForTokens(
-        uint amountIn,
-        uint amountOutMin,
-        address[] calldata path,
-        address to,
-        uint deadline
-    ) external returns (uint[] memory amounts);
-}
-
 // ----------------------IMPLEMENTATION------------------------------
 
 
@@ -189,7 +159,7 @@ contract LiquidationOperator is IUniswapV2Callee {
     // Uniswap interfaces.
     IUniswapV2Factory factory = IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
     IUniswapV2Pair pair_WETH_USDT = IUniswapV2Pair(factory.getPair(address(WETH), address(USDT)));
-    IUniswapV2Router02 router = IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+    IUniswapV2Pair pair_WBTC_WETH = IUniswapV2Pair(factory.getPair(address(WBTC), address(WETH)));
 
     // some helper function, it is totally fine if you can finish the lab without using these function
     // https://github.com/Uniswap/v2-periphery/blob/master/contracts/libraries/UniswapV2Library.sol
@@ -293,16 +263,16 @@ contract LiquidationOperator is IUniswapV2Callee {
 
         // 2.2 swap the liquidated WBTC for WETH
         console.log("swap WBTC for WETH");
-        WBTC.approve(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D, liquidated); // address is of the Uniswap router for better transactions? idk saw it on the docs
-        address[] memory path = new address[](2); // for parameter
-        path[0] = address(WBTC);
-        path[1] = address(WETH);
-        router.swapExactTokensForTokens(liquidated, 0, path, address(this), deadline); // swap liquidated WBTC for WETH amount
+        WBTC.approve(address(pair_WBTC_WETH), liquidated); // approve before transfer
+        WBTC.transfer(address(pair_WBTC_WETH), liquidated); // send WBTC to pool
+        (uint reserveWBTC, uint reserveWETH1,) = pair_WBTC_WETH.getReserves(); 
+        uint WETH_revenue = getAmountOut(liquidated, reserveWBTC, reserveWETH1);
+        pair_WBTC_WETH.swap(0, WETH_revenue, address(this), ""); // regular swap to get WETH reveunue from collateral
 
         // 2.3 repay loan + interest
         console.log("repay flash loan in WETH");
-        (uint reserveWETH, uint reserveUSDT,) = pair_WETH_USDT.getReserves(); // get reserves in the pair
-        uint repaymentAmount = getAmountIn(amount1, reserveWETH, reserveUSDT); // given amount of asset amount1 and pair reserves, figures out how much to repay
+        (uint reserveWETH2, uint reserveUSDT,) = pair_WETH_USDT.getReserves(); // get reserves in the pair
+        uint repaymentAmount = getAmountIn(amount1, reserveWETH2, reserveUSDT); // given amount of asset amount1 and pair reserves, figures out how much to repay
         WETH.approve(msg.sender, repaymentAmount); // aprove before transfer
         WETH.transfer(msg.sender, repaymentAmount); // transfer to msg.sender
 
