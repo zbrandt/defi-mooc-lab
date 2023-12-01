@@ -252,12 +252,10 @@ contract LiquidationOperator is IUniswapV2Callee {
 
         
         // 3. Convert the WETH into ETH and send back to sender
-        uint profitWETH = WETH.balanceOf(address(this));
+        uint profitWETH = WETH.balanceOf(address(this)); // all profit since we start with zero presumably
         console.log("profit: ", profitWETH);
         WETH.withdraw(profitWETH);
-        (bool sent, ) = msg.sender.call{value: profitWETH}(""); // send profits
-        require(sent, "Didn't give caller profits");
-
+        msg.sender.call{value: profitWETH}(""); // send profits
         
     }
     // the workflow is like this:
@@ -303,7 +301,7 @@ contract LiquidationOperator is IUniswapV2Callee {
 
         // 2.3 repay loan + interest
         console.log("repay flash loan in WETH");
-        (uint reserveWETH, uint reserveUSDT,) = IUniswapV2Pair(msg.sender).getReserves(); // get reserves in the pair
+        (uint reserveWETH, uint reserveUSDT,) = pair_WETH_USDT.getReserves(); // get reserves in the pair
         uint repaymentAmount = getAmountIn(amount1, reserveWETH, reserveUSDT); // given amount of asset amount1 and pair reserves, figures out how much to repay
         WETH.approve(msg.sender, repaymentAmount); // aprove before transfer
         WETH.transfer(msg.sender, repaymentAmount); // transfer to msg.sender
