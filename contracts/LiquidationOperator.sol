@@ -253,34 +253,34 @@ contract LiquidationOperator is IUniswapV2Callee {
         // 3. Convert the profit into ETH and send back to sender
         uint profitWETH = WETH.balanceOf(address(this));
         console.log("profit: ", profitWETH);
-        IWETH(address(WETH)).withdraw(profitWETH);
-        (bool sent, ) = msg.sender.call{value: profitWETH}("");
+        WETH.withdraw(profitWETH);
+        (bool sent, ) = msg.sender.call{value: profitWETH}(""); // send profits
         require(sent, "Didn't give caller profits");
 
         
     }
 
     // required by the swap
-    function uniswapV2Call(
+    function uniswapV2Call( // flash swap function?
         address,
         uint256,
         uint256 amount1,
         bytes calldata
     ) external override {
 
-        uint preLiquidated = IERC20(address(WBTC)).balanceOf(address(this));
+        uint preLiquidated = WBTC.balanceOf(address(this));
 
         // 2.1 liquidate the target user
-        IERC20(address(USDT)).approve(address(lendingPool), amount1);
+        USDT.approve(address(lendingPool), amount1);
 
         console.log("liquidate");
         lendingPool.liquidationCall(address(WBTC), address(USDT), userToLiquidate, amount1, false);
-        uint liquidated = IERC20(address(WBTC)).balanceOf(address(this)) - preLiquidated;
+        uint liquidated = WBTC.balanceOf(address(this)) - preLiquidated;
         console.log("Liquidated: ", liquidated);
 
         // 2.2 swap WBTC for other things
         console.log("swap WBTC for WETH");
-        IERC20(address(WBTC)).approve(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D, liquidated);
+        WBTC.approve(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D, liquidated);
         address[] memory path = new address[](2); // for parameter
         path[0] = address(WBTC);
         path[1] = address(WETH);
@@ -290,8 +290,8 @@ contract LiquidationOperator is IUniswapV2Callee {
         console.log("repay flash loan in WETH");
         (uint reserveWETH, uint reserveUSDT,) = IUniswapV2Pair(msg.sender).getReserves();
         uint repaymentAmount = getAmountIn(amount1, reserveWETH, reserveUSDT);
-        IERC20(address(WETH)).approve(msg.sender, repaymentAmount);
-        IERC20(address(WETH)).transfer(msg.sender, repaymentAmount);
+        WETH.approve(msg.sender, repaymentAmount);
+        WETH.transfer(msg.sender, repaymentAmount);
 
     }
 }
